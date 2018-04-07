@@ -1,0 +1,357 @@
+<project name="policy-build" default="dist" basedir="/home/oracle/GeoIPPolicy/">
+
+	<property file="build.properties" />
+
+	<property name="configSrc" location="src/config/java" />
+	<property name="runtimeSrc" location="src/runtime/java" />
+	<property name="runtimeApp" location="src/runtime/app" />
+	<property name="uiResources" location="src/ui/resources" />
+	<property name="metadataFile" location="src/metadata/metadata.json" />
+	<property name="build" location="build" />
+	<property name="dist" location="dist" />
+	<property name="extLibs" location="extLibs" />
+	<property name="basedir" value="${basedir}"/>
+	
+	<target name="init">
+		<mkdir dir="${build}" />
+		<mkdir dir="${build}/config" />
+		<mkdir dir="${build}/runtime" />
+
+	</target>
+
+	<path id="dependencies.jars">
+		<fileset dir="${policy-sdk}">
+			<include name="**/*.jar" />
+		</fileset>
+		<fileset dir="${extLibs}">
+			<include name="**/*.jar" />
+			<include name="**/*.properties" />			
+		</fileset>
+	</path>
+
+	<target name="compile" depends="init">
+
+		<javac includeantruntime="false" srcdir="${configSrc}" destdir="${build}/config" source="1.7" target="1.7">
+			<classpath refid="dependencies.jars" />
+		</javac>
+
+		<javac includeantruntime="false" srcdir="${runtimeSrc}" destdir="${build}/runtime" source="1.7" target="1.7">
+			<classpath path="${build}/config" />
+			<classpath refid="dependencies.jars" />
+		</javac>
+
+	</target>
+
+	<target name="createJars" depends="compile">
+		<jar jarfile="${dist}/cache/config.jar" basedir="${build}/config" />
+		<jar jarfile="${dist}/cache/runtime.jar" basedir="${build}/runtime">
+			<zipfileset file="${metadataFile}" />
+		</jar>
+	</target>
+
+	<target name="createEAR" depends="createJars">
+		<jar jarfile="${dist}/cache/runtime.ear">
+			<zipfileset dir="${dist}/cache" includes="*.jar" prefix="APP-INF/lib" />
+			<zipfileset dir="${extLibs}" includes="*.jar" prefix="APP-INF/lib" />
+		</jar>
+		<delete file="${dist}/cache/runtime.jar" />
+	</target>
+
+	<target name="createUIResources">
+		<zip destfile="${dist}/cache/ui.zip" basedir="${uiResources}" />
+	</target>
+
+	<target name="dist" depends="revisionMgmt, createJars, createEAR, createUIResources">
+		<copy file="${metadataFile}" toDir="${dist}/cache" />
+		<jar destfile="${jarPrefix}.${policyName}.jar" basedir="${dist}/cache">
+			<manifest>
+				<attribute name="Policy-Metadata" value="metadata.json" />
+				<attribute name="Policy-UI" value="ui.zip" />
+				<attribute name="Policy-Config" value="config.jar" />
+				<attribute name="Policy-Runtime" value="runtime.ear" />
+			</manifest>
+		</jar>
+		<antcall target="deploy" />
+		<antcall target="cleanUp" />
+	</target>
+
+	<target name="revisionMgmt">
+
+		<script language="javascript">
+			
+			var echo = project.createTask("echo");
+			aRev = project.getProperty("autoRevision");
+			autoRev = java.lang.Boolean.parseBoolean(aRev);
+			
+			if (autoRev) {
+			
+				fileReader = null;
+				buffReader = null;
+				fileWriter = null;
+				buffWriter = null;
+			
+				try {
+			
+					// Read the information from the metadata.json
+					// file to be able to manage the policy revision
+			
+					try {
+			
+						metadataFile = project.getProperty("metadataFile");	
+						fileReader = new java.io.FileReader(metadataFile);
+						buffReader = new java.io.BufferedReader(fileReader);
+						strBuilder = new java.lang.StringBuilder();
+						currLine = null;
+	
+						while ((currLine = buffReader.readLine()) != null) {
+	
+							strBuilder.append(currLine);
+	
+						}
+			
+					} finally {
+			
+						if (buffReader != null) {
+			
+							buffReader.close();
+			
+						}
+			
+					}
+			
+					metadata = JSON.parse(strBuilder.toString());
+					policyType = metadata.type;
+					version = metadata.version;
+			
+					// Retrieve information from the policy using the REST
+					// API. If the policy currently exists under the type
+					// and version specified, the revision will then be
+					// automatically incremented. Otherwise the revision
+					// will be set to '1';
+			
+					mgmtServerHost = project.getProperty("mgmtServerHost");
+					mgmtServerPort = project.getProperty("mgmtServerPort");
+					mgmtServerUser = project.getProperty("mgmtServerUser");
+					mgmtServerPass = project.getProperty("mgmtServerPass");
+			
+					endpoint = mgmtServerHost + ":" + mgmtServerPort +
+						"/apiplatform/administration/v1/policies/" +
+						policyType + "/versions/" + version;
+			
+					url = new java.net.URL(endpoint);
+					urlConn = url.openConnection();
+					userPass = mgmtServerUser + ":" + mgmtServerPass;
+					basicAuth = "Basic " + javax.xml.bind.DatatypeConverter.printBase64Binary(userPass.getBytes());
+					urlConn.setRequestProperty("Authorization", basicAuth);
+			
+					currLine = null;
+					strBuilder = null;
+					policyData = null;
+					buffReader = null;
+			
+					try {
+			
+						strBuilder = new java.lang.StringBuilder();
+						buffReader = new java.io.BufferedReader(
+							new java.io.InputStreamReader(urlConn.getInputStream()));
+	
+						while((currLine = buffReader.readLine()) != null) {
+	
+							strBuilder.append(currLine);
+	
+						}
+			
+						policyData = strBuilder.toString();
+			
+					} catch (err) {
+			
+						// A 404 error in this context isn't something bad. It just means
+						// that the policy doesn't exist for the given type/version. Thus,
+						// it will be ignored and everything else will be printed out.
+			
+						if (urlConn.getResponseCode() != java.net.HttpURLConnection.HTTP_NOT_FOUND) {
+			
+							err.printStackTrace();
+			
+						}
+			
+					} finally {
+			
+						if (buffReader != null) {
+			
+							buffReader.close();
+			
+						}
+			
+					}
+			
+					if (policyData != null) {
+			
+						policyData = JSON.parse(policyData);
+						currRevision = policyData.revision;
+						nextRevision = parseInt(currRevision) + 1;
+						currRevision = nextRevision.toString();
+			
+					} else {
+			
+						currRevision = "1";
+			
+					}
+			
+					// Write the changes back to the metadata.json file
+					// so the build process can use that along with the
+					// JAR file that is going to be generated...
+			
+					metadata.revision = currRevision
+					metadata = JSON.stringify(metadata, null, 3);
+			
+					try {
+			
+						fileWriter = new java.io.FileWriter(metadataFile);
+						buffWriter = new java.io.BufferedWriter(fileWriter);
+						buffWriter.write(metadata);
+			
+					} finally {
+			
+						if (buffWriter != null) {
+			
+							buffWriter.close();
+			
+						}
+			
+					}
+			
+					echo.setMessage("Current revision has been set to '" + currRevision + "'.");
+					echo.perform();
+			
+				} catch (err) {
+			
+					err.printStackTrace();
+			
+				}
+			
+			} else {
+			
+				echo.setMessage("Automatic revision is currently disabled. " +
+				"Using the revision manually set in the policy metadata file.");
+				echo.perform();
+			
+			}
+			
+		</script>
+
+	</target>
+
+	<target name="deploy" description="deploy">
+
+		<script language="groovy" classpathref="dependencies.jars">
+			
+			import javax.xml.bind.DatatypeConverter
+			
+			def autoDeploy = project.getProperty("autoDeploy")
+			def jarPrefix = project.getProperty("jarPrefix")
+			def policyName = project.getProperty("policyName")
+			def policyFile = project.getProperty("basedir") +
+							File.separator +  jarPrefix + "." + policyName + ".jar"
+			
+			printf("Policy file:"+policyFile);
+			
+			if (Boolean.parseBoolean(autoDeploy) == true) {
+			
+				def mgmtServerHost = project.getProperty("mgmtServerHost")
+				def mgmtServerPort = project.getProperty("mgmtServerPort")
+				def endpoint = mgmtServerHost + ":" + mgmtServerPort +
+					"/apiplatform/administration/v1/policies"
+			
+				def mgmtServerUser = project.getProperty("mgmtServerUser")
+				def mgmtServerPass = project.getProperty("mgmtServerPass")
+				def userPass = mgmtServerUser + ":" + mgmtServerPass
+				def basicAuth = "Basic " + DatatypeConverter.printBase64Binary(
+					userPass.getBytes())
+			
+				def fis = null
+				def out = null
+			
+				try {
+			
+					def deploymentUrl = new URL(endpoint)
+					def deployConn = (HttpURLConnection) deploymentUrl.openConnection()
+					fis = new FileInputStream(new File(policyFile))
+			
+					deployConn.setRequestProperty("Authorization", basicAuth)
+					deployConn.setRequestProperty("Content-Type", "application/octet-stream")
+					deployConn.setRequestProperty("Content-Length", String.valueOf(fis.available()))
+					deployConn.setRequestMethod("POST")
+					deployConn.setDoOutput(true)
+			
+					def buffer = new byte[fis.available()]
+					out = deployConn.getOutputStream()
+					
+					while (true) {
+			
+						def r = fis.read(buffer)
+						if (r == -1) { break }
+						out.write(buffer, 0, r)
+			
+					}
+			
+					def responseCode = deployConn.getResponseCode()
+			
+					if (responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+			
+						println "The policy has been successfully deployed into the APIP Mgmt Tier."
+			
+					} else {
+			
+						println "Something went wrong during the deployment of the policy:"
+			
+						def responseStream = deployConn.getErrorStream()
+						if (responseStream != null)
+			{
+						buffer = new byte[responseStream.available()]
+						responseStream.read(buffer)
+						println new String(buffer)
+			}
+			else
+			{
+			printf ("no error response")
+			}
+			
+						responseStream = deployConn.getInputStream()
+						buffer = new byte[responseStream.available()]
+						responseStream.read(buffer)
+						println new String(buffer)
+			
+					}
+			
+					deployConn.disconnect()
+			
+				} catch (Exception ex) {
+			
+					ex.printStackTrace()
+			
+				} finally {
+			
+					if (fis != null) { fis.close() }
+					if (out != null) { out.close() }
+			
+				}
+			
+			} else {
+			
+				println "Automatic deployment is currently disabled. " +
+				"You can manually deploy the '" + policyFile + "' " +
+				"file in API Platform."
+			
+			}
+			
+		</script>
+
+	</target>
+
+	<target name="cleanUp" description="clean up">
+		<delete dir="${build}" />
+		<delete dir="${dist}" />
+	</target>
+
+</project>

@@ -1,0 +1,41 @@
+<div id="policy-ui-content" class="oj-form">
+
+    <div class="oj-row">
+        <span data-bind="text:l10n()['label.condition.phrase']" class="condition-field-label-2"></span>
+    </div>
+    
+    <div class="conditions-container-div"></div>
+    
+    <div>
+        <label class="policy-dialog-field-label" for="country" data-bind="text:l10n()['label.field.country']"></label>
+        <textarea id="country" rows="5" style="padding:0px;"
+                data-bind="ojComponent: {
+                component: 'ojTextArea', 
+                value: country, 
+                disabled: true,
+                rootAttributes: {
+                    style:'max-width:100%; border:1px solid silver;'}}">
+        </textarea>
+    </div>
+    
+     <div>
+        <label class="policy-dialog-field-label" for="NetworkFilename" data-bind="text:l10n()['label.field.NetworkFilename']"></label>
+        <textarea id="script" rows="1" style="resize: vertical;"
+                data-bind="ojComponent: {
+                component: 'ojTextArea',
+                value: NetworkFilename,
+                disabled: true,                
+                rootAttributes: {style:'max-width:100%; resize: vertical;'} }"></textarea>
+    </div>
+    
+        <div>
+        <label class="policy-dialog-field-label" for="GeoFilename" data-bind="text:l10n()['label.field.GeoFilename']"></label>
+        <textarea id="script" rows="1" style="resize: vertical;"
+                data-bind="ojComponent: {
+                component: 'ojTextArea',
+                value: GeoFilename,
+                disabled: true,                
+                rootAttributes: {style:'max-width:100%; resize: vertical;'} }"></textarea>
+    </div>        
+
+</div>

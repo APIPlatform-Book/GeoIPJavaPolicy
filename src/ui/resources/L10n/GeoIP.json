@@ -1,0 +1,15 @@
+{
+    "l10nBundle" : {
+        "policy.name"             : "GeoIP",
+        "policy.description"      : "This uses published data on IP to Locations. Then uses the originating host to determine call location. A list of countries of origin can be defined for exclusion in API calls",
+        "#helpInfo"               : "Complete all fields. Comments are optional.",
+        "label.field.header"      : "GeoIP",
+        "label.field.country"      : "Country Exclusion(s)",        
+        "label.field.NetworkFilename"      : "Network & IP Data File",        
+        "label.field.GeoFilename"      : "Geo Location Details Data File",                
+        "label.condition.phrase"  : "Define the country(s) to have API calls blocked from based on the provided geographic and network information provided",
+        "placeholder.country"      : "Country names as a CSV",
+        "placeholder.GeoFilename"      : "File with location information",        
+        "placeholder.NetworkFilename"      : "File with Network & IP details"
+    }
+}
